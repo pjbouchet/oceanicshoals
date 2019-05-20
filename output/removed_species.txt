@@ -1,0 +1,11 @@
+                     species
+1           Alectis ciliaris
+2         Aluterus monoceros
+3                 Atule mate
+4              Decapterus sp
+5         Echeneis naucrates
+6      Lepidochelys olivacea
+7            Manta birostris
+8           Monacanthidae sp
+9  Paramonacanthus filicauda
+10  Pseudomonacanthus peroni
