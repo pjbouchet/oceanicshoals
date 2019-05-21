@@ -176,12 +176,11 @@ srcalc <- function(dframe, name, removeTL, TLvalue){
               }
             }}}}}
     
-    # Adjusts MaxN values
-    temp$adjMaxN <- temp$max_n
-    temp$adjMaxN <- ifelse(!temp$sp.all=="SP", 0, temp$adjMaxN)
+    # Adjust MaxN values
     
-    
-    # Uses the species inclusion rules to filter out all the non-"SP" records
+    temp$max_n <- ifelse(!temp$sp.all=="SP", 0, temp$max_n)
+
+    # Use the species inclusion rules to filter out all the non-"SP" records
     # Retrieves the list of species and counts how many there are.
     # Outputs everything in an alphabetically sorted data.table
     

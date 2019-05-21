@@ -16,10 +16,14 @@
 # LIBRARIES & SETTINGS ====
 #' ====================================
 
-pack<-c("tidyverse",
+# devtools::install_github("beckyfisher/FSSgam_package")
+
+pack<-c("tidyverse", # Tidyverse for data science
+        "reshape2", # Transform data between wide and long formats
         # "ecole", # For zero-adjusted Bray Curtis
         # "MASS", # For simulating from multivariate Normal
         "raster", # GIS
+        "FSSgam", # A simple function for full subsets multiple regression in ecology with R
         # "rgdal", # GIS
         # "bioDist",
         # "mgcv", # GLM/GAM models
@@ -158,7 +162,9 @@ rm(tl.1, tl.2, tl.3)
 # Calculate species richness for each site
 #'---------------------------------------------
 
-srcalc(dframe = oshoals, name = waypoint, removeTL = TRUE, TLvalue = 3.5)
+TL.threshold <- 3.5
+
+srcalc(dframe = oshoals, name = waypoint, removeTL = TRUE, TLvalue = TL.threshold)
 
 #'---------------------------------------------
 # Save removed species to text file
@@ -171,7 +177,7 @@ utils::capture.output(x = data.frame(species = removed.species[!removed.species=
 # Ensure MaxN = 0 when SR = 0
 #'---------------------------------------------
 
-dfres[dfres$SR==0,]$adjMaxN <- 0
+dfres[dfres$SR==0,]$max_n <- 0
 
 #'---------------------------------------------
 # Retrieve species richness and sum(MaxN) for each
@@ -180,7 +186,7 @@ dfres[dfres$SR==0,]$adjMaxN <- 0
 srwpt <- dfres %>% 
   dplyr::mutate(wpt = waypoint) %>% 
   dplyr::group_by(wpt) %>% 
-  dplyr::summarise(sr = mean(SR), max_n = sum(adjMaxN), duration = mean(duration))
+  dplyr::summarise(sr = mean(SR), max_n = sum(max_n), duration = mean(duration))
 
 srwpt$max_n <- ifelse(is.na(srwpt$max_n), 0, srwpt$max_n)
 
@@ -197,10 +203,20 @@ sampling.sites <- sampling.sites %>%
                sp::SpatialPointsDataFrame(data = ., coords = cbind(.$lon, .$lat), 
                                           proj4string = wgs84) %>% 
                sp::spTransform(., CRSobj = utmOS))
+
+raster.coordinates <- sampling.sites %>% 
+  purrr::map(.x = ., .f = ~raster::as.data.frame(.x, xy=TRUE) %>% 
+               dplyr::select(coords.x1, coords.x2) %>% 
+               dplyr::rename(x = coords.x1) %>% 
+               dplyr::rename(y = coords.x2))
   
 env.data <- purrr::map2(.x = grids.stack, 
               .y = sampling.sites,
-              .f = ~raster::extract(x = .x, y = .y))
+              .f = ~raster::extract(x = .x, y = .y)) %>% 
+            purrr::map2(.x = ., 
+              .y = raster.coordinates,
+              .f = ~cbind(.x, .y))
+
 
 
 #'---------------------------------------------
@@ -221,7 +237,6 @@ osdata <- purrr::map(.x = sampling.sites,
 
 osdata <- dplyr::inner_join(x = osdata, y = srwpt, by = c('waypoint' = 'wpt'))
 osdata <- dplyr::inner_join(x = osdata, y = oshoals[, c("waypoint", "grid")], by = 'waypoint')
-
 
 par(mfrow=c(1,2))
 plot(table(osdata$sr), main = "SR")
@@ -248,11 +263,11 @@ srcalc(dframe = oshoals,
 
 species.counts <- dfres.all %>% 
   dplyr::filter(full_name%in%c(listres.all$splist$full_name)) %>% 
-  dplyr::filter(., TL >= 3.5)
+  dplyr::filter(., TL >= TL.threshold)
 
 species.counts <- species.counts %>% 
   dplyr::group_by(full_name) %>% 
-  dplyr::summarise(count = sum(adjMaxN))
+  dplyr::summarise(count = sum(max_n))
 
 species.counts <- species.counts[complete.cases(species.counts),]
 
@@ -308,7 +323,7 @@ ggsave(filename = "output/rarefaction_curve.pdf", width = 5, height = 5)
 
 oshoals.vegan <- dfres.all %>% 
   dplyr::filter(full_name%in%c(listres.all$splist$full_name)) %>% 
-  dplyr::filter(., TL >= 3.5)
+  dplyr::filter(., TL >= TL.threshold)
 
 oshoals.vegan <- dplyr::select(oshoals.vegan, c("waypoint", "full_name", "max_n"))
 oshoals.vegan <- reshape2::dcast(oshoals.vegan, waypoint ~ full_name,
@@ -422,5 +437,58 @@ utils::capture.output(x = anv.perm, file = "output/permdisp.txt")
 utils::capture.output(x = summary(oshoals.sim), file = "output/simper.txt")
 utils::capture.output(x = nmds.stress, file = "output/stress.txt")
 
+#' ====================================
+# EFFECTIVE DIVERSITY ====
+#' ====================================
 
+#'---------------------------------------------
+# Retrieve species names
+#'---------------------------------------------
+
+lnames <- oshoals %>% 
+  dplyr::filter(TL >= TL.threshold) %>% 
+  dplyr::select(full_name) %>% 
+  unique(.) %>% 
+  dplyr::pull(.)
+
+#'---------------------------------------------
+# Filter and reshape the data
+#'---------------------------------------------
+
+esr <- dfres %>% 
+  dplyr::filter(full_name%in%lnames) %>% 
+  dplyr::select(waypoint, full_name, max_n)
+
+# CHECK: sum(esr$adjMaxN) = 231
+
+esrcast <- reshape2::dcast(data = esr, 
+                           formula = waypoint ~ full_name, 
+                           value.var = "max_n", 
+                           fun.aggregate = sum)
+rownames(esrcast) <- esrcast$waypoint
+esrcast$waypoint <- NULL
+esrcast <- as.matrix(esrcast)
+
+#'---------------------------------------------
+# Calculate the Shannon-Wiener index at each site
+#'---------------------------------------------
+
+shannon.index <- vegan::diversity(esrcast, index = "shannon", MARGIN = 1)
+
+#'---------------------------------------------
+# Compute ESR as exponential of SW
+#'---------------------------------------------
+
+esr.index <- as.data.frame(shannon.index) %>% 
+  dplyr::mutate(waypoint = row.names(.)) %>% 
+  dplyr::mutate(esr = exp(shannon.index)) %>% 
+  as_tibble(.)
+
+#'---------------------------------------------
+# Add to master tibble
+#'---------------------------------------------
+
+osdata <- dplyr::inner_join(x = osdata,
+                            y = esr.index,
+                            by = 'waypoint')
 
