@@ -1,22 +1,21 @@
-#' -----------------------------------------------------------
-#' -----------------------------------------------------------
-#
-# Bouchet et al. Spatial dimensions of pelagic diversity in a geodiverse offshore marine park
-# NESP Oceanic Shoals pelagic videography. Journal of Animal Ecology.
-# 
-#' -----------------------------------------------------------
-#' -----------------------------------------------------------
+#' -------------------------------------------------------------------------------
+#' -------------------------------------------------------------------------------
+#'
+#' R code accompanying the article: Submerged carbonate banks aggregate pelagic 
+#' megafauna in offshore tropical Australia
 #' 
-#' Author: PJ Bouchet
-#' Last update: May 16, 2019
-#' 
-#' -----------------------------------------------------------
+#' -------------------------------------------------------------------------------
+#' -------------------------------------------------------------------------------
 
-#' ====================================
-# LIBRARIES & SETTINGS ====
-#' ====================================
+# Authors: Bouchet PJ, Letessier TB, Caley JM, Nichol SL, Hemmi JM, Meeuwig JJ
+# Journal: Frontiers in Marine Science (2020)
+
+# Required libraries & general settings -----------------------------------
 
 # devtools::install_github("beckyfisher/FSSgam_package")
+
+# Note: The below requires the pacman package.
+# install.packages("pacman")
 
 pacman::p_load(tidyverse,                  # Tidyverse for data science
                reshape2,                   # Transform data between wide and long formats
@@ -47,30 +46,35 @@ options(pillar.neg = FALSE) # No colouring negative numbers
 options(pillar.subtle = TRUE)
 options(pillar.sigfig = 4)
 
-set.seed(32) # Reproducible results
+set.seed(48) # Reproducible results
 
-#' ====================================
-# FUNCTIONS ====
-#' ====================================
 
-source("R/Functions.R")
+# Load functions ----------------------------------------------------------
 
-#' ====================================
-# GIS ====
-#' ====================================
+source("Bouchet_etal_Functions.R")
+
+
+# GIS data ----------------------------------------------------------------
+
+#'---------------------------------------------
+# Define geographic coordinates systems
+#'---------------------------------------------
 
 utmOS <- sp::CRS("+proj=utm +zone=52 +south +ellps=WGS84 +datum=WGS84 +units=m +no_defs")
 wgs84 <- sp::CRS("+proj=longlat +datum=WGS84")
 
 #'---------------------------------------------
-# Line shapefile of submerged banks
+# Import Line shapefile of submerged banks
 #'---------------------------------------------
 
 banks <- readRDS("gis/os_banks.rds")
 
-#' ====================================
-# ENVIRONMENTAL LAYERS ====
-#' ====================================
+
+# Environmental data ------------------------------------------------------
+
+#'---------------------------------------------
+# Define covariates of interest
+#'---------------------------------------------
 
 covariates <- c('depth', 'slope', 'curv', 'east', 'north', 'stde', 'tpiL', 'tpiS', 'bk')
 
@@ -81,10 +85,6 @@ covariates <- c('depth', 'slope', 'curv', 'east', 'north', 'stde', 'tpiL', 'tpiS
 # See raster prep R file for details on how geomorphic layers
 # were derived from the multibeam bathymetry grids
 
-# raster::writeRaster(x = grids.stack$g1,
-#                     file = 'data/grids.stack.g1.tif',
-#                     options = 'INTERLEAVE=BAND')
-
 grids.stack <- list()
 grids.stack$g1 <- raster::stack("data/grids.stack.g1.tif")
 grids.stack$g2 <- raster::stack("data/grids.stack.g2.tif")
@@ -92,11 +92,14 @@ grids.stack$g3 <- raster::stack("data/grids.stack.g3.tif")
 
 names(grids.stack$g1) <- names(grids.stack$g2) <- names(grids.stack$g3) <- covariates
 
+# raster::writeRaster(x = grids.stack$g1,
+#                     file = 'data/grids.stack.g1.tif',
+#                     options = 'INTERLEAVE=BAND')
+
 geom <- readr::read_csv("data/geom.csv")
 
-#' ====================================
-# SPECIES DATA ====
-#' ====================================
+
+# Species data ------------------------------------------------------------
 
 #'---------------------------------------------
 # Load the data
@@ -200,6 +203,12 @@ env.data <- purrr::map2(.x = grids.stack,
               .f = ~cbind(.x, .y))
 
 
+# Centroids
+
+grid.centroids <- purrr::map_df(.x = sampling.sites, .f = ~apply(coordinates(.x), 2, mean))
+grid.centroids <- tibble::tibble(grid = names(grid.centroids), 
+                                 x = as.numeric(grid.centroids[1,]), 
+                                 y = as.numeric(grid.centroids[2,]))                              
 
 #'---------------------------------------------
 # Append to df
@@ -245,17 +254,8 @@ par(mfrow = c(1,2))
 plot(table(osdata$sr), main = "SR")
 plot(table(osdata$max_n), main = "MaxN")
 
-#' ====================================
-# RAREFACTION ====
-#' ====================================
 
-# Need to re-run srcalc function to get species richness
-# for whole assemblage 
-
-srcalc(dframe = oshoals,
-       name = all, 
-       removeTL = FALSE, 
-       TLvalue = 0)
+# Rarefaction -------------------------------------------------------------
 
 #'---------------------------------------------
 # Uses package {iNEXT}
@@ -264,12 +264,15 @@ srcalc(dframe = oshoals,
 # Input data can be either df or list of abundances
 #'---------------------------------------------
 
-species.counts <- dfres.all %>% 
-  dplyr::filter(full_name%in%c(listres.all$splist$full_name)) 
-# %>% 
-#   dplyr::filter(., TL >= TL.threshold)
+# Need to re-run srcalc function to get species richness for whole assemblage 
 
-species.counts <- species.counts %>% 
+srcalc(dframe = oshoals,
+       name = all, 
+       removeTL = FALSE, 
+       TLvalue = 0)
+
+species.counts <- dfres.all %>% 
+  dplyr::filter(full_name%in%c(listres.all$splist$full_name)) %>% 
   dplyr::group_by(full_name) %>% 
   dplyr::summarise(count = sum(max_n))
 
@@ -297,8 +300,6 @@ ind.50 <- estimateD(species.counts$count, datatype = "abundance", level = 50)
 
 myggiNEXT(species.raref, grey=TRUE)+
   theme(legend.position="none")+
-  # geom_segment(data = df40, aes(x = x1, y = y1, xend = x2, yend = y2, colour = "segment"))+
-  # geom_segment(data = df40, aes(x = x1, y = y1, xend = x2, yend = y2, colour = "segment"))+
   geom_point(data = ind.50[ind.50$order==0,], aes(x = m, y = qD), fill = "white",
              colour = "black", shape = 23, size = 4)+
   geom_point(data = ind.40[ind.40$order==0,], aes(x = m, y = qD), fill = "gray",
@@ -322,9 +323,8 @@ myggiNEXT(species.raref, grey=TRUE)+
 
 ggsave(filename = "output/rarefaction_curve.pdf", width = 5, height = 5)
 
-#' ====================================
-# PERMANOVA ====
-#' ====================================
+
+# PERMANOVA ---------------------------------------------------------------
 
 #'---------------------------------------------
 # Prepare data for use with {vegan}
@@ -332,8 +332,6 @@ ggsave(filename = "output/rarefaction_curve.pdf", width = 5, height = 5)
 
 oshoals.vegan <- dfres.all %>% 
   dplyr::filter(full_name%in%c(listres.all$splist$full_name)) 
-# %>% 
-#   dplyr::filter(., TL >= TL.threshold)
 
 oshoals.vegan <- dplyr::select(oshoals.vegan, c("waypoint", "full_name", "max_n"))
 oshoals.vegan <- reshape2::dcast(oshoals.vegan, waypoint ~ full_name,
@@ -355,8 +353,6 @@ oshoals.vegan <- dplyr::inner_join(x = oshoals.vegan,
                                    y = wpt.duration,
                                    by = 'waypoint')
 
-# oshoals.vegan <- oshoals.vegan %>% dplyr::filter(duration>180)
-
 #'---------------------------------------------
 # Response variables in a sample x species matrix
 #'---------------------------------------------
@@ -374,8 +370,6 @@ oshoals.vegan.mat <- sqrt(sqrt(oshoals.vegan.matrix)) # Fourth root transform
 #'---------------------------------------------
 
 oshoals.bray0 <- ecole::bray0(x = oshoals.vegan.mat) # Zero-adjusted Bray-Curtis
-# oshoals.mGower5 <- vegdist(decostand(oshoals.vegan.mat, method = "log", logbase = 5, range.global = "range"), "altGower") # Anderson et al. (2006) version of Gower | Range standardization with "altGower" (that excludes double-zeros)
-
 
 #'---------------------------------------------
 # Run the permanova
@@ -400,28 +394,12 @@ anv.perm <- anova(vegan::betadisper(oshoals.bray0, group = oshoals.vegan$geom))
 # SIMPER - similarity percentage analysis - which species contribute to differences?
 #'---------------------------------------------
 
-# https://www.tandfonline.com/doi/pdf/10.1080/00288330809509934
-# When ANOSIM pairwise tests showed fish assemblages from two habitats differed significantly,
-# analysis of similarities (SIMPER) was used to determine the best discriminating species.
-# SIMPER identified a core group of discriminating species that contributed
-# highly to both the within-habitat similarity and between-habitat dissimilarity, exceeding a "ratio"
-# of 1.5 for each (Clarke & Warwick 2001). 
-# 
-# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3605449/
-# When significant P values were obtained from pairwise tests using PERMANOVA for baited video data, similarity percentages (SIMPER) were used to identify significant distinguishing fish species. This criteria was based on dissimilarity to standard deviation ratios (Diss/SD) >2 and percentage contributions >10%. 
-
-# https://www.frontiersin.org/articles/10.3389/fmars.2016.00241/full
-# SIMPER analysis indicated that dissimilarity between communities in the two study regions was accounted for by small contributions (<2%) by a large number of taxa (Supplementary Table 4).
-# 
-# We considered species with %–δi >  3% and with –δi/SD(–δi) > 1 as being important contributors to dissimilarity between parks (Terlizzi et al. 2005).
-
 oshoals.sim <- vegan::simper(comm = oshoals.vegan.mat, 
                              group = oshoals.vegan$geom,
                              permutations = 9999)
 summary(oshoals.sim)
 
 oshoals.sim$`bank_non-bank`$overall # overall between group dissimilarity
-
 
 #'---------------------------------------------
 # Non-metric multidimensional scaling
@@ -457,10 +435,7 @@ utils::capture.output(x = oshoals.sim$`bank_non-bank`$overall, file = "output/ov
 utils::capture.output(x = oshoalsMDS$stress, file = "output/stress.txt")
 
 
-
-#' ====================================
-# COVARIATES ==== 
-#' ====================================
+# Covariates --------------------------------------------------------------
 
 #'---------------------------------------------
 # Visual inspection of covariates
@@ -478,104 +453,35 @@ for(p in which(names(osdata)%in%covariates)){
 
 envrg <- data.frame(apply(osdata[, covariates[2:8]], MARGIN = 2, FUN = function(x) range(x)))
 
+envrg.list <- purrr::map(.x = 1:3,
+                    .f = ~data.frame(apply(osdata[osdata$grid==.x, covariates[2:8]], 
+                                              MARGIN = 2, FUN = function(x) range(x)))) %>% 
+  purrr::set_names(x = ., nm = paste0("g", 1:3))
+
+
 #'---------------------------------------------
 # Filter raster stacks
 #'---------------------------------------------
 
 grids.stack.filtered <- list()
 
-grids.stack.filtered$g1 <- extrap.filter(input.raster.stack = grids.stack$g1, 
-                                         covariate.rge = envrg, 
-                                         dat = osdata, 
-                                         convex = TRUE,
-                                         concave = FALSE)
-
-grids.stack.filtered$g2 <- extrap.filter(input.raster.stack = grids.stack$g2, 
-                                         covariate.rge = envrg, 
-                                         dat = osdata, 
-                                         convex = TRUE,
-                                         concave = FALSE)
-
-
-grids.stack.filtered$g3 <- extrap.filter(input.raster.stack = grids.stack$g3, 
-                                         covariate.rge = envrg, 
+grids.stack.filtered$g1 <- extrap.filter(input.raster.stack = grids.stack$g1,
+                                         covariate.rge = envrg.list$g1,
                                          dat = osdata,
-                                         convex = TRUE,
-                                         concave = FALSE)
+                                         method = "convex")
+
+grids.stack.filtered$g2 <- extrap.filter(input.raster.stack = grids.stack$g2,
+                                         covariate.rge = envrg.list$g2,
+                                         dat = osdata,
+                                         method = "convex")
+
+grids.stack.filtered$g3 <- extrap.filter(input.raster.stack = grids.stack$g3,
+                                         covariate.rge = envrg.list$g3,
+                                         dat = osdata,
+                                         method = "convex")
 
 
-
-#' ====================================
-# ESR ==== 
-#' ====================================
-
-#'---------------------------------------------
-# Calculates effective diversity
-#'---------------------------------------------
-
-# Extract species names (after filtering on TL)
-
-# lnames <- purrr::map_lgl(listres, is.data.frame) %>% 
-#   listres[.] %>% 
-#   purrr::map(., ~dplyr::pull(., full_name)) %>% 
-#   unlist()
-# lnames <- sort(unique(lnames))
-# 
-# # Extract relevant data
-# 
-# os.esr <- dfres %>% dplyr::filter(full_name%in%lnames)
-# os.esr <- os.esr %>% dplyr::select(., waypoint, full_name, max_n)
-# 
-# # Generate species x waypoint matrix
-# 
-# oscast <- reshape2::dcast(os.esr, waypoint~full_name, value.var = "max_n", fun.aggregate = sum) %>% 
-#   tibble::as_tibble(.)
-# 
-# os.cast <- as.matrix(oscast[,2:ncol(oscast)])
-# 
-# # Calculating Shannon-wiener index for each site
-# # Shannon or Shannon–Weaver (or Shannon–Wiener) index is defined as H = -sum p_i log(b) p_i, where p_i is the proportional abundance of species i and b is the base of the logarithm.
-# 
-# os.shannon <- vegan::diversity(os.cast, index = "shannon", MARGIN = 1)
-# 
-# # Effective SR is the exponential of shannon
-# # http://www.loujost.com/Statistics%20and%20Physics/Diversity%20and%20Similarity/EffectiveNumberOfSpecies.htm
-# # It is the first order hill number
-# 
-# os.esr <- exp(os.shannon) %>% 
-#   tibble::tibble(esr = .) %>% 
-#   dplyr::mutate(waypoint = oscast$waypoint)
-# 
-# # Combine with full dataset
-# 
-# osdata <- dplyr::left_join(x = osdata, y = os.esr, by = "waypoint")
-# 
-# # Replace NAs with zeros
-# 
-# osdata$esr <- ifelse(is.na(osdata$esr), 0, osdata$esr)
-# osdata$esr <- round(osdata$esr)
-
-
-
-#'---------------------------------------------
-# Standarde the covariates
-#'---------------------------------------------
-
-# Not needed
-
-# osdatast <- standardise.variables(df = osdata, 
-#                       col.indices = which(names(osdata)%in%covariates),
-#                       sd.factor = 2,
-#                       append = FALSE)               
-# 
-# osdatast <- osdata %>% 
-#   dplyr::select(lon, lat, waypoint, sr, max_n, duration, grid) %>% 
-#   cbind(., osdatast) %>% 
-#   as_tibble(.)
-
-#' ====================================
-# SPATIAL MODELS ==== 
-#' ====================================
+# Spatial models ----------------------------------------------------------
 
 #'---------------------------------------------
 # Fit test models
@@ -634,8 +540,6 @@ w <-  fields::rdist(coord.s)  # point at which R runs into memory problems
 ape::Moran.I(x = residuals(gam.sr), w = w) 
 ape::Moran.I(x = residuals(gam.max_n), w = w) 
 
-# countreg::rootogram(object = gam.sr)
-
 # Average distance between sites within a grid
 
 osdata %>% 
@@ -653,23 +557,6 @@ osdata %>%
   dplyr::select(x, y) %>% 
   fields::rdist(.) %>% mean(.)
 
-plot.variogram(gam.sr, osdata)
-plot.variogram(gam.max_n, osdata)
-
-# plot.tensor(gam.sr)
-# plot.tensor(gam.max_n)
-
-# DHARMa also an option
-
-# sim_n <- simulate(test.gam.max_n, nsim = 10000)
-# sim_res <- DHARMa::createDHARMa(simulatedResponse = sim_n, 
-#                                observedResponse = osdata$max_n,
-#                                fittedPredictedResponse = predict(test.gam.max_n, type = "response"),
-#                                integerResponse = TRUE)
-# 
-# plot(sim_res)
-# DHARMa::testSpatialAutocorrelation(simulationOutput = sim_res, x = osdata$x, y= osdata$y, alternative = "greater")
-
 
 #'---------------------------------------------
 # Define distributions and link functions
@@ -684,12 +571,14 @@ plot.variogram(gam.max_n, osdata)
 model.set.sr <- list.model.sets(response.var = 'sr', 
                                 dat = osdata, 
                                 corr.cutoff = 0.7, 
-                                max.predictors = 4)
+                                max.predictors = 4, 
+                                k = 4)
 
 model.set.max_n <- list.model.sets(response.var = 'max_n', 
                                    dat = osdata, 
                                    corr.cutoff = 0.7, 
-                                   max.predictors = 4)
+                                   max.predictors = 4, 
+                                   k = 4)
 
 #'---------------------------------------------
 # Fit all models
@@ -724,44 +613,50 @@ ggsave(filename = "output/curv_sm.pdf")
 gratia::draw(gam.max_n.fss$best.model$obj, select = 2) 
 ggsave(filename = "output/tpiL_sm.pdf")
 
+gam.sr.fss$var.importance
+gam.max_n.fss$var.importance
+
 coord.s <- cbind(osdata$x, osdata$y)      
 w <-  fields::rdist(coord.s)  # point at which R runs into memory problems 
 
 ape::Moran.I(x = residuals(gam.sr.fss$best.model$obj), w = w) 
 ape::Moran.I(x = residuals(gam.max_n.fss$best.model$obj), w = w) 
 
-# countreg::rootogram(object = gam.sr)
 
 plot.variogram(gam.sr.fss$best.model$obj, osdata)
 plot.variogram(gam.max_n.fss$best.model$obj, osdata)
 
 plot.tensor(gam.sr.fss$best.model$obj)
 plot.tensor(gam.sr.fss$success.models$depth.te.bk)
-# ggsave(filename = "output/tensor_sr.pdf")
-# 
-plot.tensor(gam.max_n.fss$best.model$obj)
-plot.tensor(gam.max_n.fss$success.models$depth.te.bk)
-# ggsave(filename = "output/tensor_max_n.pdf")
 
-#' ====================================
-# PREDICTIONS ==== 
-#' ====================================
+plot.tensor(gam.max_n.fss$best.model$obj)
+plot.tensor(gam.max_n.fss$success.models[[as.character(gam.max_n.fss$top.models$modname)[which(grepl("depth.te.bk", as.character(gam.max_n.fss$top.models$modname)))]]])
+plot.tensor(gam.max_n.fss$success.models$depth.te.bk)
+
+
+# Model predictions -------------------------------------------------------
 
 #'---------------------------------------------
 # Generate predictions from the best models
 #'---------------------------------------------
 
-preds.sr <- purrr::map(.x = grids.stack.filtered,
-                       .f = ~get.predictions(model = gam.sr.fss$best.model$obj, 
-                                             proj.syst = utmOS, 
-                                             pred.pts = .x,
-                                             verbose = TRUE))
+preds.sr <- purrr::map(.x = grids.stack,
+                          .f = ~get.predictions(model = gam.sr.fss$best.model$obj, 
+                                                 proj.syst = utmOS, 
+                                                 pred.pts = .x,
+                                                 boot.dat = osdata,
+                                                 method = "convex", 
+                                                 sample.coef = FALSE,
+                                                 verbose = TRUE))
 
-preds.max_n <- purrr::map(.x = grids.stack.filtered,
+preds.max_n <- purrr::map(.x = grids.stack,
                           .f = ~get.predictions(model = gam.max_n.fss$best.model$obj, 
-                                                proj.syst = utmOS, 
-                                                pred.pts = .x,
-                                                verbose = TRUE))
+                                                 proj.syst = utmOS, 
+                                                 pred.pts = .x,
+                                                 boot.dat = osdata,
+                                                 method = "concave", 
+                                                 sample.coef = FALSE,
+                                                 verbose = TRUE))
 
 plot(preds.sr$g1)
 plot(preds.sr$g2)
@@ -771,9 +666,8 @@ plot(preds.max_n$g1)
 plot(preds.max_n$g2)
 plot(preds.max_n$g3)
 
-#' ====================================
-# BOOTSTRAP ==== 
-#' ====================================
+
+# Bootstrap ---------------------------------------------------------------
 
 n.iter <- 100
 
@@ -806,24 +700,23 @@ os.boots <- purrr::map(.x = 1:n.iter,
   purrr::map(.x = ., .f = ~do.call(rbind, .x))
 
 
-#' ====================================
-# MODEL FREQUENCIES ==== 
-#' ====================================
+
+# Model frequencies -------------------------------------------------------
 
 #'-------------------------------------------------
 # Run full subset on bootstrap datasets and record the best models
 #'-------------------------------------------------
 
-wenger.probs <- compute.mod.probs(bootstrap.data = os.boots)
+wenger.probs <- compute.mod.probs(bootstrap.data = os.boots, k = 4)
 
 # saveRDS(object = wenger.probs, file = "data/wenger_probs.rds")
-wenger.probs <- readRDS(file = "data/wenger_probs.rds")
+# wenger.probs <- readRDS(file = "data/wenger_probs.rds")
 
 #'-------------------------------------------------
 # Calculate model frequencies
 #'-------------------------------------------------
 
-wenger.probs <- purrr::map(.x = wenger.probs, 
+wengerprobs <- purrr::map(.x = wenger.probs, 
                            .f = ~.x[!.x=="null"] %>% 
                              table(.) %>% 
                              tibble::as_tibble(.) %>% 
@@ -835,18 +728,15 @@ wenger.probs <- purrr::map(.x = wenger.probs,
 # Sample models according to their frequencies
 #'-------------------------------------------------
 
-wenger.mods <- purrr::map(.x = wenger.probs, 
+wenger.mods <- purrr::map(.x = wengerprobs, 
                           .f = ~sample(x = .x$modname, 
                                        size = n.iter, 
                                        replace = TRUE, 
                                        prob = .x$prob))
 
 
-#' ====================================
-# UNCERTAINTY ==== 
-#' ====================================
 
-set.seed(32) # Reproducible results
+# Uncertainty -------------------------------------------------------------
 
 #'-------------------------------------------------
 # Fit the selected models to bootstrap data  
@@ -873,6 +763,7 @@ boot.mods.sr <- purrr::map2(.x = os.boots,
 pb <- dplyr::progress_estimated(n.iter)
 
 boot.mods.max_n <- purrr::map2(.x = os.boots,
+                                 # rep(list(osdata), n.iter),
                                .y = wenger.mods$max_n,
                                .f = ~{
                                  pb$tick()$print()  
@@ -893,47 +784,41 @@ boot.mods.max_n <- purrr::map2(.x = os.boots,
 
 # SR
 
+boot.preds.sr <- purrr::cross2(.x = 1:n.iter, .y = grids.stack)
 pb <- dplyr::progress_estimated(n.iter * 3)
+boot.preds.sr <- purrr::map(.x = boot.preds.sr, 
+                            .f = ~{
+                              pb$tick()$print()
+                              get.predictions2(model = boot.mods.sr[[.x[[1]]]], 
+                                                   proj.syst = utmOS,
+                                                   pred.pts = .x[[2]],
+                                                   boot.dat = os.boots[[.x[[1]]]],
+                                                   method = "alpha",
+                                                   sample.coef = TRUE,
+                                                   verbose = FALSE)})
 
-boot.preds.sr <- purrr::cross2(.x = boot.mods.sr, 
-                               .y = grids.stack.filtered) %>% 
-  purrr::map(.x = ., 
-             .f = ~ {
-               pb$tick()$print()
-               get.predictions(model = .x[[1]], 
-                               proj.syst = utmOS,
-                               pred.pts = .x[[2]],
-                               sample.coef = TRUE,
-                               verbose = FALSE)})
                             
 # MaxN
 
+boot.preds.max_n <- purrr::cross2(.x = 1:n.iter, .y = grids.stack)
 pb <- dplyr::progress_estimated(n.iter * 3)
-
-boot.preds.max_n <- purrr::cross2(.x = boot.mods.max_n, 
-                                  .y = grids.stack.filtered) %>% 
-  purrr::map(.x = ., 
-             .f = ~ {
-               pb$tick()$print()
-               get.predictions(model = .x[[1]], 
-                               proj.syst = utmOS,
-                               pred.pts = .x[[2]],
-                               sample.coef = TRUE,
-                               verbose = FALSE)})
+boot.preds.max_n <- purrr::map(.x = boot.preds.max_n, 
+                               .f = ~{
+                                 pb$tick()$print()
+                                 get.predictions2(model = boot.mods.max_n[[.x[[1]]]], 
+                                                      proj.syst = utmOS,
+                                                      pred.pts = .x[[2]],
+                                                      boot.dat = os.boots[[.x[[1]]]],
+                                                      method = "alpha",
+                                                      sample.coef = TRUE,
+                                                      verbose = FALSE)})
 
 #'-------------------------------------------------
 # Stack predictions for each grid
 #'-------------------------------------------------
 
-boot.preds.sr$g1 <- boot.preds.sr[1:100] %>% raster::stack(.)
-boot.preds.sr$g2 <- boot.preds.sr[101:200] %>% raster::stack(.)
-boot.preds.sr$g3 <- boot.preds.sr[201:300] %>% raster::stack(.)
-boot.preds.sr[1:300] <- NULL
-
-boot.preds.max_n$g1 <- boot.preds.max_n[1:100] %>% raster::stack(.)
-boot.preds.max_n$g2 <- boot.preds.max_n[101:200] %>% raster::stack(.)
-boot.preds.max_n$g3 <- boot.preds.max_n[201:300] %>% raster::stack(.)
-boot.preds.max_n[1:300] <- NULL
+bootpreds.sr <- stack_boots(input.list = boot.preds.sr)
+bootpreds.max_n <- stack_boots(input.list = boot.preds.max_n)
 
 #'-------------------------------------------------
 # Calculating robust statistics (median and robust CV)
@@ -942,26 +827,11 @@ boot.preds.max_n[1:300] <- NULL
 # rCV = nIQR/median, with Normalised IQR (nIQR) is IQR * 0.7413, which converts to an estimate of SD
 # https://arxiv.org/pdf/1907.01110.pdf
 
-boot.sr <- boot.max_n <- list()
-
-boot.sr$median <- purrr::map(.x = boot.preds.sr,
-                             .f = ~raster::calc(x = .x, fun = median))
-
-boot.max_n$median  <- purrr::map(.x = boot.preds.max_n,
-                             .f = ~raster::calc(x = .x, fun = median))                     
-
-boot.sr$rcv <- purrr::map(.x = boot.preds.sr,
-                          .f = ~raster::calc(x = .x, 
-                                             fun = function(x){0.7413*IQR(x, na.rm = TRUE)/median(x, na.rm = TRUE)}))
-
-boot.max_n$rcv <- purrr::map(.x = boot.preds.max_n,
-                             .f = ~raster::calc(x = .x, 
-                                                fun = function(x){0.7413*IQR(x, na.rm = TRUE)/median(x, na.rm = TRUE)}))                        
+boot.sr <- calc_mCV(input.list = bootpreds.sr, method = "median")
+boot.max_n <- calc_mCV(input.list = bootpreds.max_n, method = "median")
+                  
                             
-
-#' ====================================
-# BIVARIATE ==== 
-#' ====================================
+# Bivariate plots ---------------------------------------------------------
 
 biv.rasters <- purrr::map2(.x = preds.sr, 
                       .y = preds.max_n,
@@ -971,8 +841,8 @@ biv.rasters <- purrr::map2(.x = preds.sr,
                                             variable.one = 'sr',
                                             variable.two = 'max_n'))
 
-biv.rasters.boot <- purrr::map2(.x = boot.sr$median, 
-                           .y = boot.max_n$median,
+biv.rasters.boot <- purrr::map2(.x = boot.sr$m, 
+                           .y = boot.max_n$m,
                            .f = ~bivariate.index(percentile = 10,
                                                  raster.one = .x,
                                                  raster.two = .y,
@@ -985,17 +855,14 @@ b <- purrr::map(.x = 1:3,
              raster::as.data.frame(., xy = TRUE) %>% 
                ggplot2::ggplot(data = ., aes(x, y, fill = z)) +
                geom_tile(colour = 'black') +
-               scale_fill_gradientn(colours = pals::viridis(10)) +
+               scale_fill_gradientn(colours = pals::brewer.ylorbr(10)) +
                theme_minimal() + labs(x = "", y = "") +
                theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())})
 
 cowplot::plot_grid(b[[1]], b[[2]], b[[3]], ncol = 3)
-# ggsave(filename = "output/biv_distr.pdf", height = 2.5, width = 10)
 
 
-#' ====================================
-# MAPPING ==== 
-#' ====================================
+# Mapping -----------------------------------------------------------------
 
 #'---------------------------------------------
 # Get raster summaries (min, max) to help parameterise plot.grid function
@@ -1004,7 +871,7 @@ cowplot::plot_grid(b[[1]], b[[2]], b[[3]], ncol = 3)
 sr.fivenum <- purrr::map(.x = preds.sr, .f = ~sumrast(.x)) %>% 
   purrr::map(.x = ., .f = ~as.list(.x))
 
-sr.fivenum.boot <- purrr::map(.x = boot.sr$median, .f = ~sumrast(.x)) %>% 
+sr.fivenum.boot <- purrr::map(.x = boot.sr$m, .f = ~sumrast(.x)) %>% 
   purrr::map(.x = ., .f = ~as.list(.x))
 
 sr.fivenum.cv <- purrr::map(.x = boot.sr$rcv, .f = ~sumrast(.x)) %>% 
@@ -1013,7 +880,7 @@ sr.fivenum.cv <- purrr::map(.x = boot.sr$rcv, .f = ~sumrast(.x)) %>%
 max_n.fivenum <- purrr::map(.x = preds.max_n, .f = ~sumrast(.x)) %>% 
   purrr::map(.x = ., .f = ~as.list(.x))
 
-max_n.fivenum.boot <- purrr::map(.x = boot.max_n$median, .f = ~sumrast(.x)) %>% 
+max_n.fivenum.boot <- purrr::map(.x = boot.max_n$m, .f = ~sumrast(.x)) %>% 
   purrr::map(.x = ., .f = ~as.list(.x))
 
 max_n.fivenum.cv <- purrr::map(.x = boot.max_n$rcv, .f = ~sumrast(.x)) %>% 
@@ -1037,7 +904,10 @@ plot.grid(input.raster = biv.rasters.boot$g1$raster,
           skew = 0,
           max.pt.size = 3,
           col.palette = mapcol,
-          save.to.pdf = TRUE,
+          save.to.pdf = TRUE, 
+          add.arrow = FALSE, 
+          add.scale = FALSE,
+          plot.legend = FALSE,
           file.name = "bivr")
 
 plot.grid(input.raster = biv.rasters.boot$g2$raster, 
@@ -1052,7 +922,10 @@ plot.grid(input.raster = biv.rasters.boot$g2$raster,
           skew = 0,
           max.pt.size = 3,
           col.palette = mapcol,
-          save.to.pdf = TRUE,
+          save.to.pdf = TRUE, 
+          add.arrow = FALSE, 
+          add.scale = FALSE,
+          plot.legend = FALSE,
           file.name = "bivr")
 
 plot.grid(input.raster = biv.rasters.boot$g3$raster, 
@@ -1067,299 +940,83 @@ plot.grid(input.raster = biv.rasters.boot$g3$raster,
           skew = 0,
           max.pt.size = 3,
           col.palette = mapcol,
-          save.to.pdf = TRUE,
+          save.to.pdf = TRUE, 
+          add.arrow = FALSE, 
+          add.scale = FALSE,
+          plot.legend = FALSE,
           file.name = "bivr")
 
 
-# Grid 1 ====
+plot.all(log.response.sr = FALSE,
+         log.response.max_n = TRUE,
+         log.cv.sr = FALSE, 
+         log.cv.max_n = FALSE,
+         cv.over.one.sr = TRUE, 
+         cv.over.one.max_n = TRUE,
+         z.int.sr = 0.2, 
+         z.int.max_n = 1,
+         z.int.sr.cv = 0.2, 
+         z.int.max_n.cv = 0.2)
+
+
 
 plot.grid(input.raster = preds.sr$g1, 
           response.variable = "sr", 
           log.response = FALSE,
           grid.number = 1, 
           add.banks = TRUE, 
-          add.bruvs = TRUE,
+          add.bruvs = FALSE,
           zmin = 0,
           zmax = sr.fivenum$g1$Max.,
           z.int = 0.2, 
           skew = 0,
           max.pt.size = 3,
           col.palette = rev(pals::brewer.spectral(100)[c(15:100, rep(100, 10))]),
-          save.to.pdf = TRUE,
+          save.to.pdf = TRUE, 
+          add.arrow = FALSE, 
+          add.scale = FALSE,
+          plot.legend = FALSE,
           file.name = "preds")
-
-plot.grid(input.raster = preds.max_n$g1, 
-          response.variable = "max_n", 
-          log.response = TRUE,
-          grid.number = 1, 
-          add.banks = TRUE, 
-          add.bruvs = TRUE,
-          zmin = 0,
-          zmax = max_n.fivenum$g1$Max.,
-          z.int = 1,
-          skew = 0,
-          col.palette = rev(brewer.spectral(100)[1:100]),
-          save.to.pdf = TRUE,
-          file.name = "preds")
-
-# ................................
-
-plot.grid(input.raster = boot.sr$median$g1, 
-          response.variable = "sr", 
-          log.response = FALSE,
-          grid.number = 1, 
-          add.banks = TRUE, 
-          add.bruvs = TRUE,
-          zmin = 0,
-          zmax = sr.fivenum.boot$g1$Max.,
-          z.int = 0.2, 
-          skew = 0,
-          max.pt.size = 3,
-          col.palette = rev(pals::brewer.spectral(100)[c(15:100, rep(100, 10))]),
-          save.to.pdf = TRUE,
-          file.name = "preds_boot")
-
-plot.grid(input.raster = boot.max_n$median$g1, 
-          response.variable = "max_n", 
-          log.response = TRUE,
-          grid.number = 1, 
-          add.banks = TRUE, 
-          add.bruvs = TRUE,
-          zmin = 0,
-          zmax = max_n.fivenum.boot$g1$Max.,
-          z.int = 5,
-          skew = 0,
-          col.palette = rev(brewer.spectral(100)[10:100]),
-          save.to.pdf = TRUE,
-          file.name = "preds_boot")
-
-# ................................
-
-plot.grid(input.raster = boot.sr$rcv$g1, 
-          response.variable = "sr", 
-          log.response = FALSE,
-          cv.over.one = F,
-          grid.number = 1, 
-          add.banks = TRUE, 
-          add.bruvs = TRUE,
-          zmin = 0,
-          zmax = 1,
-          z.int = 0.2, 
-          skew = 0,
-          max.pt.size = 3,
-          col.palette = pals::viridis(100),
-          save.to.pdf = TRUE,
-          file.name = "preds_cv")
-
-plot.grid(input.raster = boot.max_n$rcv$g1, 
-          response.variable = "max_n", 
-          log.response = FALSE,
-          cv.over.one = TRUE,
-          grid.number = 1, 
-          add.banks = TRUE, 
-          add.bruvs = TRUE,
-          zmin = 0,
-          zmax = 1,
-          z.int = 0.2,
-          skew = 0,
-          over.one.col = "darkorange",
-          col.palette = pals::viridis(100),
-          save.to.pdf = TRUE,
-          file.name = "preds_cv")
-
-
-# Grid 2 ====
 
 plot.grid(input.raster = preds.sr$g2, 
           response.variable = "sr", 
           log.response = FALSE,
           grid.number = 2, 
           add.banks = TRUE, 
-          add.bruvs = TRUE,
+          add.bruvs = FALSE,
           zmin = 0,
           zmax = sr.fivenum$g2$Max.,
           z.int = 0.2, 
           skew = 0,
           max.pt.size = 3,
           col.palette = rev(pals::brewer.spectral(100)[c(15:100, rep(100, 10))]),
-          save.to.pdf = TRUE,
+          save.to.pdf = TRUE, 
+          add.arrow = FALSE, 
+          add.scale = FALSE,
+          plot.legend = FALSE,
           file.name = "preds")
-
-
-plot.grid(input.raster = preds.max_n$g2, 
-          response.variable = "max_n", 
-          log.response = TRUE,
-          grid.number = 2, 
-          add.banks = TRUE, 
-          add.bruvs = TRUE,
-          zmin = 0,
-          zmax = max_n.fivenum$g2$Max.,
-          z.int = 5,
-          skew = 0,
-          col.palette = rev(pals::brewer.spectral(100)[c(15:100, rep(100, 10))]),
-          save.to.pdf = TRUE,
-          file.name = "preds")
-
-# ................................
-
-plot.grid(input.raster = boot.sr$median$g2, 
-          response.variable = "sr", 
-          log.response = FALSE,
-          grid.number = 2, 
-          add.banks = TRUE, 
-          add.bruvs = TRUE,
-          zmin = 0,
-          zmax = sr.fivenum.boot$g2$Max.,
-          z.int = 0.2, 
-          skew = 0,
-          max.pt.size = 3,
-          col.palette = rev(pals::brewer.spectral(100)[c(15:100, rep(100, 10))]),
-          save.to.pdf = TRUE,
-          file.name = "preds_boot")
-
-plot.grid(input.raster = boot.max_n$median$g2, 
-          response.variable = "max_n", 
-          log.response = TRUE,
-          grid.number = 2, 
-          add.banks = TRUE, 
-          add.bruvs = TRUE,
-          zmin = 0,
-          zmax = max_n.fivenum.boot$g2$Max.,
-          z.int = 5,
-          skew = 0,
-          col.palette = rev(pals::brewer.spectral(100)[c(15:100, rep(100, 10))]),
-          save.to.pdf = TRUE,
-          file.name = "preds_boot")
-
-# ................................
-
-plot.grid(input.raster = boot.sr$rcv$g2, 
-          response.variable = "sr", 
-          log.response = FALSE,
-          grid.number = 2, 
-          add.banks = TRUE, 
-          add.bruvs = TRUE,
-          zmin = 0,
-          zmax = sr.fivenum.cv$g2$Max.,
-          z.int = 0.2, 
-          skew = 0,
-          max.pt.size = 3,
-          col.palette = pals::viridis(100),
-          save.to.pdf = TRUE,
-          file.name = "preds_cv")
-
-plot.grid(input.raster = boot.max_n$rcv$g2, 
-          response.variable = "max_n", 
-          log.response = FALSE,
-          cv.over.one = TRUE, 
-          over.one.col = "darkorange",
-          grid.number = 2, 
-          add.banks = TRUE, 
-          add.bruvs = TRUE,
-          zmin = 0,
-          zmax = 1,
-          z.int = 0.2,
-          skew = 0,
-          col.palette = pals::viridis(100),
-          save.to.pdf = TRUE,
-          file.name = "preds_cv")
-
-# Grid 3 ====
 
 plot.grid(input.raster = preds.sr$g3, 
           response.variable = "sr", 
           log.response = FALSE,
           grid.number = 3, 
           add.banks = TRUE, 
-          add.bruvs = TRUE,
+          add.bruvs = FALSE,
           zmin = 0,
           zmax = sr.fivenum$g3$Max.,
           z.int = 0.2, 
           skew = 0,
           max.pt.size = 3,
           col.palette = rev(pals::brewer.spectral(100)[c(15:100, rep(100, 10))]),
-          save.to.pdf = TRUE,
+          save.to.pdf = TRUE, 
+          add.arrow = FALSE, 
+          add.scale = FALSE,
+          plot.legend = FALSE,
           file.name = "preds")
 
 
-plot.grid(input.raster = preds.max_n$g3, 
-          response.variable = "max_n", 
-          log.response = TRUE,
-          grid.number = 3, 
-          add.banks = TRUE, 
-          add.bruvs = TRUE,
-          zmin = 0,
-          zmax = max_n.fivenum$g3$Max.,
-          z.int = 5,
-          skew = 0,
-          col.palette = rev(pals::brewer.spectral(100)[c(15:100, rep(100, 10))]),
-          save.to.pdf = TRUE,
-          file.name = "preds")
 
-# ................................
-
-plot.grid(input.raster = boot.sr$median$g3, 
-          response.variable = "sr", 
-          log.response = FALSE,
-          grid.number = 3, 
-          add.banks = TRUE, 
-          add.bruvs = TRUE,
-          zmin = 0,
-          zmax = sr.fivenum.boot$g3$Max.,
-          z.int = 0.2, 
-          skew = 0,
-          max.pt.size = 3,
-          col.palette = rev(pals::brewer.spectral(100)[c(15:100, rep(100, 10))]),
-          save.to.pdf = TRUE,
-          file.name = "preds_boot")
-
-plot.grid(input.raster = boot.max_n$median$g3, 
-          response.variable = "max_n", 
-          log.response = TRUE,
-          grid.number = 3, 
-          add.banks = TRUE, 
-          add.bruvs = TRUE,
-          zmin = 0,
-          zmax = max_n.fivenum.boot$g3$Max.,
-          z.int = 5,
-          skew = 0,
-          col.palette = rev(pals::brewer.spectral(100)[c(15:100, rep(100, 10))]),
-          save.to.pdf = TRUE,
-          file.name = "preds_boot")
-
-# ................................
-
-plot.grid(input.raster = boot.sr$rcv$g3, 
-          response.variable = "sr", 
-          log.response = FALSE,
-          grid.number = 3, 
-          add.banks = TRUE, 
-          add.bruvs = TRUE,
-          zmin = 0,
-          zmax = 1,
-          z.int = 0.2, 
-          skew = 0,
-          max.pt.size = 3,
-          col.palette = pals::viridis(100),
-          save.to.pdf = TRUE,
-          file.name = "preds_cv")
-
-plot.grid(input.raster = boot.max_n$rcv$g3, 
-          response.variable = "max_n", 
-          cv.over.one = TRUE,
-          over.one.col = "darkorange",
-          log.response = FALSE,
-          grid.number = 3, 
-          add.banks = TRUE, 
-          add.bruvs = TRUE,
-          zmin = 0,
-          zmax = 1,
-          z.int = 0.2, 
-          skew = 0,
-          col.palette = pals::viridis(100),
-          save.to.pdf = TRUE,
-          file.name = "preds_cv")
-
+# Miscellaneous -----------------------------------------------------------
 
 # S and N per grid
 
@@ -1373,6 +1030,7 @@ dfres %>% filter(grid==1) %>% filter(full_name%in%listres$splist.1$full_name) %>
 dfres %>% filter(grid==2) %>% filter(full_name%in%listres$splist.2$full_name) %>% summarise(N = sum(max_n))
 dfres %>% filter(grid==3) %>% filter(full_name%in%listres$splist.3$full_name) %>% summarise(N = sum(max_n))
 
+ 
 # Variation in S and N across sites
 
 srcalc(dframe = oshoals, name = waypoint, removeTL = F, TLvalue = 0)
@@ -1402,8 +1060,6 @@ n3 <- n3[!n3%in%c("Carangidae sp", "Carcharhinus sp", "", "Carangoides sp", "Mon
 oshoals %>% filter(grid==1) %>% filter(full_name%in%n1) %>% summarise(max_n = sum(max_n))
 oshoals %>% filter(grid==2) %>% filter(full_name%in%n2) %>% summarise(max_n = sum(max_n))
 oshoals %>% filter(grid==3) %>% filter(full_name%in%n3) %>% summarise(max_n = sum(max_n))
-
-
 
 dfres %>% 
   dplyr::mutate(wpt = waypoint) %>% 
