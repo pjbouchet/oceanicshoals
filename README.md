@@ -1,6 +1,6 @@
 ## Submerged carbonate banks aggregate pelagic megafauna in offshore tropical Australia
 
-This repository contains code and data needed to reproduce the article:
+This repository contains code and data accompanying the article:
 
 **Bouchet PJ, Letessier TB, Caley JM, Nichol SL, Hemmi JM, Meeuwig JJ**. Submerged carbonate banks aggregate pelagic megafauna in offshore tropical Australia. Frontiers in Marine Science.
 
