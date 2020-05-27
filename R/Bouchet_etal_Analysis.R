@@ -12,10 +12,11 @@
 
 # Required libraries & general settings -----------------------------------
 
-# devtools::install_github("beckyfisher/FSSgam_package")
+remotes::install_github("beckyfisher/FSSgam_package")
+remotes::install_github("phytomosaic/ecole")
 
 # Note: The below requires the pacman package.
-# install.packages("pacman")
+install.packages("pacman")
 
 pacman::p_load(tidyverse,                  # Tidyverse for data science
                reshape2,                   # Transform data between wide and long formats
@@ -32,7 +33,6 @@ pacman::p_load(tidyverse,                  # Tidyverse for data science
                gratia,                     # Extra functionalities for GAMs
                ape,                        # Moran's I
                fields,                     # Euclidean distance matrices
-               FSSgam,                     # Full subsets GAMs
                prettymapr,                 # Scale Bar, North Arrow, and Pretty Margins in R
                gridGraphics                # Redraw Base Graphics Using 'grid' Graphics
 )
@@ -282,10 +282,30 @@ species.counts <- species.counts[complete.cases(species.counts),]
 # Rarefaction curve
 #'---------------------------------------------
 
+# see https://cran.r-project.org/web/packages/iNEXT/vignettes/Introduction.html
+
+# Individual-based
+
 species.raref <- iNEXT::iNEXT(x = species.counts$count,
                               q = 0,
                               datatype = "abundance",
                               endpoint = 5000)
+
+
+# Sample-based
+
+species.incidence <- dfres.all %>% 
+  dplyr::filter(full_name%in%c(listres.all$splist$full_name)) %>% 
+  dplyr::group_by(full_name) %>% 
+  dplyr::summarise(count = length(unique(waypoint)))
+
+species.counts.list <- list(c(length(unique(oshoals$waypoint)), species.incidence$count))
+
+species.raref.samplebased <- iNEXT::iNEXT(x = species.counts.list,
+                              q = 0,
+                              datatype = "incidence_freq",
+                              size = seq(1, 1000, 5))
+
 
 #'---------------------------------------------
 # Estimate for 50 individuals
@@ -298,12 +318,12 @@ ind.50 <- estimateD(species.counts$count, datatype = "abundance", level = 50)
 # Plotting the resulting curve
 #'---------------------------------------------
 
-myggiNEXT(species.raref, grey=TRUE)+
-  theme(legend.position="none")+
+myggiNEXT(species.raref, grey = TRUE)+
+  theme(legend.position = "none")+
   geom_point(data = ind.50[ind.50$order==0,], aes(x = m, y = qD), fill = "white",
-             colour = "black", shape = 23, size = 4)+
+             colour = "black", shape = 23, size = 4) +
   geom_point(data = ind.40[ind.40$order==0,], aes(x = m, y = qD), fill = "gray",
-             colour = "black", shape = 23, size = 4)+
+             colour = "black", shape = 23, size = 4) +
   ggsidekick::theme_sleek()+
   theme(legend.position = "none")+
   ylab("Species richness")+
@@ -375,11 +395,16 @@ oshoals.bray0 <- ecole::bray0(x = oshoals.vegan.mat) # Zero-adjusted Bray-Curtis
 # Run the permanova
 #'---------------------------------------------
 
-oshoals.permanova.BC0 <- vegan::adonis2(oshoals.bray0 ~ duration + geom, # Model formula
+oshoals.permanova.BC0 <- vegan::adonis2(formula = oshoals.bray0 ~ duration + geom, # Model formula
                                         data = oshoals.vegan, # df for independent vars
                                         permutations = 9999,
                                         strata = "geom", # strata to constrain permutations
                                         by = "margin") # Type III sums of squares - most conservative
+
+vegan::adonis(formula = oshoals.bray0 ~ duration + geom, # Model formula
+              data = oshoals.vegan, # df for independent vars
+              permutations = 9999, by = "margin") # Type III sums of squares - most conservative
+
 # See page 71 Anderson's manual
 
 oshoals.permanova.BC0

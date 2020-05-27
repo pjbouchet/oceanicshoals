@@ -27,6 +27,17 @@ ovd <- function(model){
 }
 
 #'---------------------------------------------
+# Function to retrieve feeding guild from FishBase
+#'---------------------------------------------
+
+get.guild <- function(speciesname){
+  
+  guild <- rfishbase::ecology(speciesname)
+  return(guild$FeedingType)
+  
+}
+
+#'---------------------------------------------
 # Wrapper around RFishbase functions to retrieve the trophic
 # level of species of interest (takes mean of genus or family if necessary)
 #'---------------------------------------------
