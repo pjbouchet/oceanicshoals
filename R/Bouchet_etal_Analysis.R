@@ -830,7 +830,7 @@ pb <- dplyr::progress_estimated(n.iter * 3)
 boot.preds.max_n <- purrr::map(.x = boot.preds.max_n, 
                                .f = ~{
                                  pb$tick()$print()
-                                 get.predictions2(model = boot.mods.max_n[[.x[[1]]]], 
+                                 get.predictions(model = boot.mods.max_n[[.x[[1]]]], 
                                                       proj.syst = utmOS,
                                                       pred.pts = .x[[2]],
                                                       boot.dat = os.boots[[.x[[1]]]],
