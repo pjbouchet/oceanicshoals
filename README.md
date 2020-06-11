@@ -2,7 +2,7 @@
 
 This repository contains code and data accompanying the article:
 
-**Bouchet PJ, Letessier TB, Caley JM, Nichol SL, Hemmi JM, Meeuwig JJ**. Submerged carbonate banks aggregate pelagic megafauna in offshore tropical Australia. Frontiers in Marine Science.
+**Bouchet PJ, Letessier TB, Caley JM, Nichol SL, Hemmi JM, Meeuwig JJ**. Submerged carbonate banks aggregate pelagic megafauna in offshore tropical Australia. *Frontiers in Marine Science*, DOI: [10.3389/fmars.2020.00530](https://www.frontiersin.org/articles/10.3389/fmars.2020.00530/abstract)
 
 #### Funding
  
