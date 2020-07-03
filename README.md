@@ -1,14 +1,9 @@
 ## Submerged carbonate banks aggregate pelagic megafauna in offshore tropical Australia
 
-<script type='text/javascript' src='https://d1bxh8uas1mnw7.cloudfront.net/assets/embed.js'></script>
-
 <!-- badges: start -->
 
-[![DOI](https://img.shields.io/badge/DOI-10.3389%2Ffmars.2020.00530-brightgreen.svg?style=flat-square)](https://www.frontiersin.org/articles/10.3389/fmars.2020.00530/)
+[![DOI](https://img.shields.io/badge/DOI-10.3389%2Ffmars.2020.00530-brightgreen.svg?style=flat-square)](https://www.frontiersin.org/articles/10.3389/fmars.2020.00530/) [![OA](https://img.shields.io/badge/Open-access-orange.svg?style=flat-square)](#)
 
-[![OA](https://img.shields.io/badge/Open-access-orange.svg?style=flat-square)](#)
-
-<div data-badge-popover="right" data-badge-type="2" data-doi="10.3389/fmars.2020.00530" data-condensed="true" data-hide-no-mentions="true" class="altmetric-embed"></div>
 <!-- badges: end -->
 
 
